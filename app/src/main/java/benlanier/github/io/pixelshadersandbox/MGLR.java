@@ -26,14 +26,23 @@ public class MGLR implements GLSurfaceView.Renderer {
             "}";
 
     private static final String fragShaderSrc =
-            "void main(void) {\n" +
-            "    gl_FragColor = vec4(gl_FragCoord.x / 500.0, 0.0, 1.0, 1.0);\n" +
-            "}";
+//            "precision mediump float;\n" +
+            "uniform float iGlobalTime;\n" +
+            "uniform vec2 iResolution;\n" +
+
+                    "void main(void)\n" +
+                    "{\n" +
+                    "    gl_FragColor = vec4(abs(cos(iGlobalTime)), abs(sin(iGlobalTime)), 1.0, 1.0);\n" +
+                    "}";
 
     private int program;
     private int vertexPositionAttribute;
 
     private int[] vtxBufHandle = new int[1];
+    private int globalTimeLoc;
+    private float startTime;
+    private int iResolutionLoc;
+
     @Override
     public void onSurfaceCreated(GL10 gl, EGLConfig config) {
         GLES20.glClearColor(0.f, 0.f, 0.f, 1.f);
@@ -52,17 +61,29 @@ public class MGLR implements GLSurfaceView.Renderer {
         vertexPositionAttribute = GLES20.glGetAttribLocation(program, "aVertexPosition");
         GLES20.glEnableVertexAttribArray(vertexPositionAttribute);
 
+        globalTimeLoc = GLES20.glGetUniformLocation(program, "iGlobalTime");
+        if (globalTimeLoc == -1) {
+            throw new RuntimeException("ugh");
+        }
+
         FloatBuffer fb = FloatBuffer.wrap(new float[]{1f, 1f, 0f, -1f, 1f, 0f, 1f, -1f, 0f, -1f, -1f, 0f});
         GLES20.glGenBuffers(1, vtxBufHandle, 0);
         GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, vtxBufHandle[0]);
         GLES20.glBufferData(GLES20.GL_ARRAY_BUFFER, fb.capacity() * 4, fb, GLES20.GL_STATIC_DRAW);
 
         GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, 0);
+
+        startTime = System.nanoTime() / 1000000000f;
+        GLES20.glUniform1f(globalTimeLoc, startTime);
     }
 
     @Override
     public void onSurfaceChanged(GL10 gl, int width, int height) {
         GLES20.glViewport(0, 0, width, height);
+        iResolutionLoc = GLES20.glGetUniformLocation(program, "iResolution");
+        if (iResolutionLoc != -1) {
+            GLES20.glUniform2f(iResolutionLoc, width, height);
+        }
     }
 
     @Override
@@ -72,6 +93,8 @@ public class MGLR implements GLSurfaceView.Renderer {
         Matrix.frustumM(perspM, 0, -1, 1, -1, 1, .1f, 100.f);
         Matrix.setIdentityM(mvM, 0);
         Matrix.translateM(mvM, 0, 0, 0, -.1f);
+
+        GLES20.glUniform1f(globalTimeLoc, (System.nanoTime() / 1000000000f) - startTime);
 
         GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, vtxBufHandle[0]);
 
