@@ -16,23 +16,36 @@ public class MGLR implements GLSurfaceView.Renderer {
     float[] mvM = new float[16];
 
     private static final String vertexShaderSrc =
-            "attribute vec3 aVertexPosition;\n" +
+            "#version 100\n" +
+            "attribute vec4 aVertexPosition;\n" +
             "\n" +
             "uniform mat4 uMVMatrix;\n" +
             "uniform mat4 uPMatrix;\n" +
             "\n" +
+            "varying mediump vec2 vTextureCoord;\n" +
+            "\n" +
             "void main(void) {\n" +
-            "  gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);\n" +
+            "  gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition.xy, 0.0, 1.0);\n" +
+            "  vTextureCoord = aVertexPosition.zw;\n" +
             "}";
 
     private static final String fragShaderSrc =
-//            "precision mediump float;\n" +
+            "#version 100\n" +
+    "#extension GL_OES_standard_derivatives : enable\n" +
+            "precision mediump float;\n" +
             "uniform float iGlobalTime;\n" +
             "uniform vec2 iResolution;\n" +
 
-                    "void main(void)\n" +
-                    "{\n" +
-                    "    gl_FragColor = vec4(abs(cos(iGlobalTime)), abs(sin(iGlobalTime)), 1.0, 1.0);\n" +
+                    "varying vec2 vTextureCoord;\n" +
+
+                    "void main(void) {\n" +
+                    "    float d = vTextureCoord.x * vTextureCoord.x + vTextureCoord.y * vTextureCoord.y;\n" +
+                    "\n" +
+                    "    if (d > 1.0) {\n" +
+                    "        discard;\n" +
+                    "    }\n" +
+                    "\n" +
+                    "    gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);\n" +
                     "}";
 
     private int program;
@@ -40,8 +53,10 @@ public class MGLR implements GLSurfaceView.Renderer {
 
     private int[] vtxBufHandle = new int[1];
     private int globalTimeLoc;
-    private float startTime;
+    private long prevTime;
+    private long elapsedTime;
     private int iResolutionLoc;
+    private long nowTime;
 
     @Override
     public void onSurfaceCreated(GL10 gl, EGLConfig config) {
@@ -61,20 +76,27 @@ public class MGLR implements GLSurfaceView.Renderer {
         vertexPositionAttribute = GLES20.glGetAttribLocation(program, "aVertexPosition");
         GLES20.glEnableVertexAttribArray(vertexPositionAttribute);
 
-        globalTimeLoc = GLES20.glGetUniformLocation(program, "iGlobalTime");
-        if (globalTimeLoc == -1) {
-            throw new RuntimeException("ugh");
-        }
+//        globalTimeLoc = GLES20.glGetUniformLocation(program, "iGlobalTime");
+//        if (globalTimeLoc == -1) {
+//            throw new RuntimeException("ugh");
+//        }
 
-        FloatBuffer fb = FloatBuffer.wrap(new float[]{1f, 1f, 0f, -1f, 1f, 0f, 1f, -1f, 0f, -1f, -1f, 0f});
+        FloatBuffer fb = FloatBuffer.wrap(
+                new float[]{
+                        0f, 1f, -1f, 1f,
+                        1f, 1f, 1f, 1f,
+                        1f, 0f, 1f, -1f,
+                        0f, 0f, -1f, -1f
+                });
         GLES20.glGenBuffers(1, vtxBufHandle, 0);
         GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, vtxBufHandle[0]);
         GLES20.glBufferData(GLES20.GL_ARRAY_BUFFER, fb.capacity() * 4, fb, GLES20.GL_STATIC_DRAW);
 
         GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, 0);
 
-        startTime = System.nanoTime() / 1000000000f;
-        GLES20.glUniform1f(globalTimeLoc, startTime);
+//        prevTime = System.nanoTime();
+//        elapsedTime = 0L;
+//        GLES20.glUniform1f(globalTimeLoc, 1.f * elapsedTime);
     }
 
     @Override
@@ -90,20 +112,24 @@ public class MGLR implements GLSurfaceView.Renderer {
     public void onDrawFrame(GL10 gl) {
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT | GLES20.GL_DEPTH_BUFFER_BIT);
 
-        Matrix.frustumM(perspM, 0, -1, 1, -1, 1, .1f, 100.f);
+        Matrix.frustumM(perspM, 0, 0, 1, 0, 1, .1f, 100.f);
         Matrix.setIdentityM(mvM, 0);
         Matrix.translateM(mvM, 0, 0, 0, -.1f);
 
-        GLES20.glUniform1f(globalTimeLoc, (System.nanoTime() / 1000000000f) - startTime);
+//        nowTime = System.nanoTime();
+//        elapsedTime += nowTime - prevTime;
+//        GLES20.glUniform1f(globalTimeLoc, (elapsedTime / 1000000000f));
 
         GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, vtxBufHandle[0]);
 
-        GLES20.glVertexAttribPointer(vertexPositionAttribute, 3, GLES20.GL_FLOAT, false, 0, 0);
+        GLES20.glVertexAttribPointer(vertexPositionAttribute, 4, GLES20.GL_FLOAT, false, 0, 0);
 
         GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(program, "uPMatrix"), 1, false, perspM, 0);
         GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(program, "uMVMatrix"), 1, false, mvM, 0);
 
-        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_FAN, 0, 4);
+
+//        prevTime = nowTime;
     }
 
     public static int loadShader(int type, String source) {
